@@ -15,22 +15,28 @@ import (
 type packet struct {
 	Pname       string
 	Pconnection net.Conn
+	Poutput     *bufio.Writer
 	Ptime       time.Time
 	Pmessage    string
 	Ptype       int
+	Ptimestamp  bool
 }
 
 // the types of packages
 const TYPE_LOGIN int = 0
 const TYPE_MESSAGE int = 1
 const TYPE_LOGOUT int = 2
+const TYPE_OPTION int = 3
 
 // send a message to all connections
-func handlemessage(message string, connections map[string]packet) {
+func handlemessage(message packet, connections map[string]packet) {
 	for _, user := range connections {
-		output := bufio.NewWriter(user.Pconnection)
-		output.WriteString(message)
-		output.Flush()
+		if user.Ptimestamp {
+			timestamp := message.Ptime.Format("2006-01-02 15:04:05")
+			user.Poutput.WriteString("[" + timestamp + "] ")
+		}
+		user.Poutput.WriteString(message.Pmessage)
+		user.Poutput.Flush()
 	}
 }
 
@@ -49,6 +55,7 @@ func handleconnection(c net.Conn, packetchan chan packet) {
 
 	user.Pname = strings.TrimSpace(name)
 	user.Pconnection = c
+	user.Poutput = output
 	user.Ptime = time.Now()
 	user.Ptype = TYPE_LOGIN
 	packetchan <- user
@@ -59,7 +66,11 @@ func handleconnection(c net.Conn, packetchan chan packet) {
 			break
 		} else if len(line) > 2 {
 			user.Pmessage = user.Pname + "> " + line
-			user.Ptype = TYPE_MESSAGE
+			if line[0] == '/' {
+				user.Ptype = TYPE_OPTION
+			} else {
+				user.Ptype = TYPE_MESSAGE
+			}
 			user.Ptime = time.Now()
 			packetchan <- user
 		}
@@ -70,6 +81,55 @@ func handleconnection(c net.Conn, packetchan chan packet) {
 	packetchan <- user
 
 	user.Pconnection.Close()
+}
+
+// handles any option (/ commands)
+func handleoption(packetrec packet, connectionsmap *map[string]packet) {
+	connections := *connectionsmap
+	if strings.Contains(packetrec.Pmessage, "/timestamp") {
+		user := connections[packetrec.Pname]
+		user.Ptimestamp = true
+	}
+
+	if strings.Contains(packetrec.Pmessage, "/listusers") {
+		packetrec.Poutput.WriteString("Current users:\n")
+		for _, user := range connections {
+			packetrec.Poutput.WriteString("- " + user.Pname + "\n")
+		}
+		packetrec.Poutput.Flush()
+	}
+
+	if strings.Contains(packetrec.Pmessage, "/whisper") {
+		fields := strings.Fields(packetrec.Pmessage)
+		message := strings.Join(fields[3:], " ")
+		message = "[Whisper] " + fields[0] + " " + message
+		user, present := connections[fields[2]]
+		if present {
+			user.Poutput.WriteString(message)
+			user.Poutput.Flush()
+		} else {
+			packetrec.Poutput.WriteString("# Cannot find user [" + fields[2] + "]\n")
+			packetrec.Poutput.Flush()
+		}
+	}
+
+	if strings.Contains(packetrec.Pmessage, "/help") {
+		message := "Commands:\n"
+		message = message + "    /timestamp\n"
+		message = message + "    /listusers\n"
+		message = message + "    /whisper <user> <message>\n"
+		message = message + "    /help\n"
+		message = message + "    /quit\n"
+		packetrec.Poutput.WriteString(message)
+		packetrec.Poutput.Flush()
+	}
+
+	if strings.Contains(packetrec.Pmessage, "/quit") {
+		packetrec.Ptype = TYPE_LOGOUT
+		packetrec.Ptime = time.Now()
+		delete(*connectionsmap, packetrec.Pname)
+		packetrec.Pconnection.Close()
+	}
 }
 
 // handle all packets
@@ -85,10 +145,13 @@ func handlepacket(packetchan chan packet) {
 			connections[packetrec.Pname] = packetrec
 
 		case TYPE_MESSAGE:
-			go handlemessage(packetrec.Pmessage, connections)
+			go handlemessage(packetrec, connections)
 
 		case TYPE_LOGOUT:
 			delete(connections, packetrec.Pname)
+
+		case TYPE_OPTION:
+			go handleoption(packetrec, &connections)
 
 		default:
 			// nothing
@@ -135,6 +198,7 @@ func signals(donechan chan bool, packetchan chan packet) {
 	var serveruser packet
 	serveruser.Pname = "Server"
 	serveruser.Ptime = time.Now()
+	serveruser.Poutput = bufio.NewWriter(os.Stdout)
 	serveruser.Pmessage = serveruser.Pname + "> Server going down in 10 seconds!\n"
 	serveruser.Ptype = TYPE_MESSAGE
 
