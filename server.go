@@ -79,7 +79,7 @@ func handleconnection(c net.Conn, packetchan chan packet) {
 func handlepacket(packetchan chan packet) {
 	connections := make(map[string]packet)
 	for {
-		packetrec := <- packetchan
+		packetrec := <-packetchan
 		switch packetrec.Ptype {
 		case TYPE_LOGIN:
 			connections[packetrec.Pname] = packetrec
@@ -138,7 +138,7 @@ func signals(donechan chan bool, packetchan chan packet) {
 	serveruser.Pmessage = serveruser.Pname + "> Server going down in 10 seconds!\n"
 	serveruser.Ptype = TYPE_MESSAGE
 
-	<- sigschan
+	<-sigschan
 	packetchan <- serveruser
 	time.Sleep(time.Second * 10)
 	donechan <- true
