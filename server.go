@@ -107,7 +107,7 @@ func handleoption(packetrec packet, connectionsmap *map[string]packet) {
 	if strings.Contains(packetrec.Pmessage, "/whisper") {
 		fields := strings.Fields(packetrec.Pmessage)
 		message := strings.Join(fields[3:], " ")
-		message = "[Whisper] " + fields[0] + " " + message
+		message = "[Whisper] " + fields[0] + " " + message + "\n"
 		user, present := connections[fields[2]]
 		if present {
 			user.Poutput.WriteString(message)
