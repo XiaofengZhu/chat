@@ -89,6 +89,7 @@ func handleoption(packetrec packet, connectionsmap *map[string]packet) {
 	if strings.Contains(packetrec.Pmessage, "/timestamp") {
 		user := connections[packetrec.Pname]
 		user.Ptimestamp = true
+		(*connectionsmap)[packetrec.Pname] = user
 	}
 
 	if strings.Contains(packetrec.Pmessage, "/listusers") {
