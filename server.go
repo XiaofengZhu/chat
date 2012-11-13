@@ -88,7 +88,11 @@ func handleoption(packetrec packet, connectionsmap *map[string]packet) {
 	connections := *connectionsmap
 	if strings.Contains(packetrec.Pmessage, "/timestamp") {
 		user := connections[packetrec.Pname]
-		user.Ptimestamp = true
+		if user.Ptimestamp == false {
+			user.Ptimestamp = true
+		} else {
+			user.Ptimestamp = false
+		}
 		(*connectionsmap)[packetrec.Pname] = user
 	}
 
