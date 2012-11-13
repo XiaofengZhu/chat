@@ -87,13 +87,13 @@ func handleconnection(c net.Conn, packetchan chan packet) {
 func handleoption(packetrec packet, connectionsmap *map[string]packet) {
 	connections := *connectionsmap
 	if strings.Contains(packetrec.Pmessage, "/timestamp") {
-		user := connections[packetrec.Pname]
+		user := connections[strings.ToLower(packetrec.Pname)]
 		if user.Ptimestamp == false {
 			user.Ptimestamp = true
 		} else {
 			user.Ptimestamp = false
 		}
-		(*connectionsmap)[packetrec.Pname] = user
+		(*connectionsmap)[strings.ToLower(packetrec.Pname)] = user
 	}
 
 	if strings.Contains(packetrec.Pmessage, "/listusers") {
@@ -132,7 +132,7 @@ func handleoption(packetrec packet, connectionsmap *map[string]packet) {
 	if strings.Contains(packetrec.Pmessage, "/quit") {
 		packetrec.Ptype = TYPE_LOGOUT
 		packetrec.Ptime = time.Now()
-		delete(*connectionsmap, packetrec.Pname)
+		delete(*connectionsmap, strings.ToLower(packetrec.Pname))
 		packetrec.Pconnection.Close()
 	}
 }
@@ -147,13 +147,13 @@ func handlepacket(packetchan chan packet) {
 		packetrec := <-packetchan
 		switch packetrec.Ptype {
 		case TYPE_LOGIN:
-			connections[packetrec.Pname] = packetrec
+			connections[strings.ToLower(packetrec.Pname)] = packetrec
 
 		case TYPE_MESSAGE:
 			go handlemessage(packetrec, connections)
 
 		case TYPE_LOGOUT:
-			delete(connections, packetrec.Pname)
+			delete(connections, strings.ToLower(packetrec.Pname))
 
 		case TYPE_OPTION:
 			go handleoption(packetrec, &connections)
