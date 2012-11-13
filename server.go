@@ -11,6 +11,7 @@ import (
 	"time"
 )
 
+// the packet to hold information
 type packet struct {
 	Pname       string
 	Pconnection net.Conn
@@ -19,10 +20,12 @@ type packet struct {
 	Ptype       int
 }
 
+// the types of packages
 const TYPE_LOGIN int = 0
 const TYPE_MESSAGE int = 1
 const TYPE_LOGOUT int = 2
 
+// send a message to all connections
 func handlemessage(message string, connections map[string]packet) {
 	for _, user := range connections {
 		output := bufio.NewWriter(user.Pconnection)
@@ -31,6 +34,11 @@ func handlemessage(message string, connections map[string]packet) {
 	}
 }
 
+// handle the connection
+// - get the user's name
+// - setup the packet information (does not change much)
+// - take all user input, until the user leaves
+// - log the user out and close the connection
 func handleconnection(c net.Conn, packetchan chan packet) {
 	var user packet
 	input := bufio.NewReader(c)
@@ -64,6 +72,10 @@ func handleconnection(c net.Conn, packetchan chan packet) {
 	user.Pconnection.Close()
 }
 
+// handle all packets
+// - user login: stores user in with the rest of the connections
+// - message: send the message to all connected users
+// - user logout: remove the user from the connection list
 func handlepacket(packetchan chan packet) {
 	connections := make(map[string]packet)
 	for {
@@ -84,6 +96,7 @@ func handlepacket(packetchan chan packet) {
 	}
 }
 
+// accept all connections and start a go routine to handle them
 func accept(packetchan chan packet, listen net.Listener) {
 	for {
 		connection, err := listen.Accept()
@@ -97,6 +110,9 @@ func accept(packetchan chan packet, listen net.Listener) {
 	}
 }
 
+// start sets up the listening information,
+//  starts to handle all packets,
+//  finally starts accepting connections
 func start(packetchan chan packet) {
 	listen, err := net.Listen("tcp", ":2000")
 	if err != nil {
@@ -109,7 +125,9 @@ func start(packetchan chan packet) {
 	go accept(packetchan, listen)
 }
 
-// signal handling (and sending true through done)
+// signal handling
+// - when a signal is received send a message from the server
+// - send information to main to stop the blocking receive
 func signals(donechan chan bool, packetchan chan packet) {
 	sigschan := make(chan os.Signal, 1)
 	signal.Notify(sigschan, syscall.SIGINT, syscall.SIGTERM)
