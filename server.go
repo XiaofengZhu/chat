@@ -23,10 +23,12 @@ type packet struct {
 }
 
 // the types of packages
-const TYPE_LOGIN int = 0
-const TYPE_MESSAGE int = 1
-const TYPE_LOGOUT int = 2
-const TYPE_OPTION int = 3
+const (
+	TYPE_LOGIN = iota
+	TYPE_MESSAGE
+	TYPE_LOGOUT
+	TYPE_OPTION
+)
 
 // send a message to all connections
 func handlemessage(message packet, connections map[string]packet) {
