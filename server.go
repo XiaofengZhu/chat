@@ -81,7 +81,6 @@ func handleconnection(c net.Conn, packetchan chan packet) {
 	user.Ptype = TYPE_LOGOUT
 	user.Ptime = time.Now()
 	packetchan <- user
-
 	user.Pconnection.Close()
 }
 
@@ -89,13 +88,13 @@ func handleconnection(c net.Conn, packetchan chan packet) {
 func handleoption(packetrec packet, connectionsmap *map[string]packet) {
 	connections := *connectionsmap
 	if strings.Contains(packetrec.Pmessage, "/timestamp") {
-		user := connections[strings.ToLower(packetrec.Pname)]
+		user := connections[packetrec.Pconnection.RemoteAddr().String()]
 		if user.Ptimestamp == false {
 			user.Ptimestamp = true
 		} else {
 			user.Ptimestamp = false
 		}
-		(*connectionsmap)[strings.ToLower(packetrec.Pname)] = user
+		(*connectionsmap)[packetrec.Pconnection.RemoteAddr().String()] = user
 	}
 
 	if strings.Contains(packetrec.Pmessage, "/listusers") {
@@ -105,26 +104,26 @@ func handleoption(packetrec packet, connectionsmap *map[string]packet) {
 		}
 		packetrec.Poutput.Flush()
 	}
-
-	if strings.Contains(packetrec.Pmessage, "/whisper") {
-		fields := strings.Fields(packetrec.Pmessage)
-		message := strings.Join(fields[3:], " ")
-		message = "[Whisper] " + fields[0] + " " + message + "\n"
-		user, present := connections[fields[2]]
-		if present {
-			user.Poutput.WriteString(message)
-			user.Poutput.Flush()
-		} else {
-			packetrec.Poutput.WriteString("# Cannot find user [" + fields[2] + "]\n")
-			packetrec.Poutput.Flush()
+	/*
+		if strings.Contains(packetrec.Pmessage, "/whisper") {
+			fields := strings.Fields(packetrec.Pmessage)
+			message := strings.Join(fields[3:], " ")
+			message = "[Whisper] " + fields[0] + " " + message + "\n"
+			user, present := connections[fields[2]]
+			if present {
+				user.Poutput.WriteString(message)
+				user.Poutput.Flush()
+			} else {
+				packetrec.Poutput.WriteString("# Cannot find user [" + fields[2] + "]\n")
+				packetrec.Poutput.Flush()
+			}
 		}
-	}
-
+	*/
 	if strings.Contains(packetrec.Pmessage, "/help") {
 		message := "Commands:\n"
 		message = message + "    /timestamp\n"
 		message = message + "    /listusers\n"
-		message = message + "    /whisper <user> <message>\n"
+//		message = message + "    /whisper <user> <message>\n"
 		message = message + "    /help\n"
 		message = message + "    /quit\n"
 		packetrec.Poutput.WriteString(message)
@@ -134,7 +133,7 @@ func handleoption(packetrec packet, connectionsmap *map[string]packet) {
 	if strings.Contains(packetrec.Pmessage, "/quit") {
 		packetrec.Ptype = TYPE_LOGOUT
 		packetrec.Ptime = time.Now()
-		delete(*connectionsmap, strings.ToLower(packetrec.Pname))
+		delete(*connectionsmap, packetrec.Pconnection.RemoteAddr().String())
 		packetrec.Pconnection.Close()
 	}
 }
@@ -147,15 +146,16 @@ func handlepacket(packetchan chan packet) {
 	connections := make(map[string]packet)
 	for {
 		packetrec := <-packetchan
+
 		switch packetrec.Ptype {
 		case TYPE_LOGIN:
-			connections[strings.ToLower(packetrec.Pname)] = packetrec
+			connections[packetrec.Pconnection.RemoteAddr().String()] = packetrec
 
 		case TYPE_MESSAGE:
 			go handlemessage(packetrec, connections)
 
 		case TYPE_LOGOUT:
-			delete(connections, strings.ToLower(packetrec.Pname))
+			delete(connections, packetrec.Pconnection.RemoteAddr().String())
 
 		case TYPE_OPTION:
 			go handleoption(packetrec, &connections)
