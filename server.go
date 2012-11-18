@@ -30,6 +30,29 @@ const (
 	TYPE_OPTION
 )
 
+// this will check if the name is already used before adding them to the list.
+// - only 1 name may be used, this is to make whispers work
+func logincheck(packetrec packet, connectionsmap *map[string]packet) {
+	nameused := false
+	for _, users := range *connectionsmap {
+		usertest := strings.ToLower(users.Pname)
+		packtest := strings.ToLower(packetrec.Pname)
+		if strings.Contains(usertest, packtest) && len(usertest) == len(packtest) {
+			nameused = true
+			break
+		}
+	}
+
+	if nameused {
+		packetrec.Poutput.WriteString("Name [" + packetrec.Pname)
+		packetrec.Poutput.WriteString("] already in use!\n")
+		packetrec.Poutput.Flush()
+		packetrec.Pconnection.Close()
+	} else {
+		(*connectionsmap)[packetrec.Pconnection.RemoteAddr().String()] = packetrec
+	}
+}
+
 // send a message to all connections
 func handlemessage(message packet, connections map[string]packet) {
 	for _, user := range connections {
@@ -37,6 +60,7 @@ func handlemessage(message packet, connections map[string]packet) {
 			timestamp := message.Ptime.Format("2006-01-02 15:04:05")
 			user.Poutput.WriteString("[" + timestamp + "] ")
 		}
+		user.Poutput.WriteString(message.Pname + "> ")
 		user.Poutput.WriteString(message.Pmessage)
 		user.Poutput.Flush()
 	}
@@ -67,7 +91,7 @@ func handleconnection(c net.Conn, packetchan chan packet) {
 		if err != nil {
 			break
 		} else if len(line) > 2 {
-			user.Pmessage = user.Pname + "> " + line
+			user.Pmessage = line
 			if line[0] == '/' {
 				user.Ptype = TYPE_OPTION
 			} else {
@@ -104,26 +128,34 @@ func handleoption(packetrec packet, connectionsmap *map[string]packet) {
 		}
 		packetrec.Poutput.Flush()
 	}
-	/*
-		if strings.Contains(packetrec.Pmessage, "/whisper") {
-			fields := strings.Fields(packetrec.Pmessage)
-			message := strings.Join(fields[3:], " ")
-			message = "[Whisper] " + fields[0] + " " + message + "\n"
-			user, present := connections[fields[2]]
-			if present {
-				user.Poutput.WriteString(message)
-				user.Poutput.Flush()
-			} else {
-				packetrec.Poutput.WriteString("# Cannot find user [" + fields[2] + "]\n")
-				packetrec.Poutput.Flush()
+
+	if strings.Contains(packetrec.Pmessage, "/whisper") && strings.Count(packetrec.Pmessage, "\"") == 2 {
+		tempslice := strings.Split(packetrec.Pmessage, "\"")
+		present := false
+		var user packet
+		for _, usertest := range connections {
+			if strings.Contains(strings.ToLower(tempslice[1]), strings.ToLower(usertest.Pname)) {
+				present = true
+				user = usertest
+				break
 			}
 		}
-	*/
+		if present {
+			user.Poutput.WriteString("[Whisper] " + packetrec.Pname)
+			user.Poutput.WriteString("> " + strings.TrimSpace(tempslice[2]) + "\n")
+			user.Poutput.Flush()
+		} else {
+			packetrec.Poutput.WriteString("# Cannot find user")
+			packetrec.Poutput.WriteString(" [" + tempslice[1] + "]!\n")
+			packetrec.Poutput.Flush()
+		}
+	}
+
 	if strings.Contains(packetrec.Pmessage, "/help") {
 		message := "Commands:\n"
 		message = message + "    /timestamp\n"
 		message = message + "    /listusers\n"
-//		message = message + "    /whisper <user> <message>\n"
+		message = message + "    /whisper \"<user>\" <message>\n"
 		message = message + "    /help\n"
 		message = message + "    /quit\n"
 		packetrec.Poutput.WriteString(message)
@@ -149,7 +181,7 @@ func handlepacket(packetchan chan packet) {
 
 		switch packetrec.Ptype {
 		case TYPE_LOGIN:
-			connections[packetrec.Pconnection.RemoteAddr().String()] = packetrec
+			go logincheck(packetrec, &connections)
 
 		case TYPE_MESSAGE:
 			go handlemessage(packetrec, connections)
@@ -206,12 +238,12 @@ func signals(donechan chan bool, packetchan chan packet) {
 	serveruser.Pname = "Server"
 	serveruser.Ptime = time.Now()
 	serveruser.Poutput = bufio.NewWriter(os.Stdout)
-	serveruser.Pmessage = serveruser.Pname + "> Server going down in 10 seconds!\n"
+	serveruser.Pmessage = serveruser.Pname + "> Server going down in 5 seconds!\n"
 	serveruser.Ptype = TYPE_MESSAGE
 
 	<-sigschan
 	packetchan <- serveruser
-	time.Sleep(time.Second * 10)
+	time.Sleep(time.Second * 5)
 	donechan <- true
 }
 
